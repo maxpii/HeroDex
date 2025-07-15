@@ -22,7 +22,15 @@ const Signup = () => {
     try {
       setError('');
       setLoading(true);
-      await signup(email, password);
+      const userCredential = await signup(email, password);
+      const { user } = userCredential;
+      await fetch("http://localhost:5000/api/user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ uid: user.uid, email: user.email }),
+      });
       navigate('/heroes');
     } catch (err) {
       setError(`Failed to create an account: ${err.message}`);

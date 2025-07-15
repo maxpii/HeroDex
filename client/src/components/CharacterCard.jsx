@@ -4,17 +4,55 @@ import { getAuth } from 'firebase/auth';
 import '../App.css';
 
 function CharacterCard({ character, context, onRemove }) {
-  const { currentUser } = useAuth();
-
-  const handleSaveHero = async () => {
-    if (!currentUser) return alert("You must be logged in to save heroes.");
-    // ... (rest of the function is unchanged)
-  };
+  const { currentUser, tokens, setTokens } = useAuth();
 
   const handleAddToDeck = async () => {
     if (!currentUser) return alert("You must be logged in to add to your deck.");
-    // ... (rest of the function is unchanged)
+
+    const cost = Object.values(character.powerstats).reduce((acc, val) => acc + (parseInt(val, 10) || 0), 0);
+
+    if (tokens < cost) {
+      return alert("You don't have enough tokens to add this hero to your deck.");
+    }
+
+    const newTokens = tokens - cost;
+
+    try {
+      const token = await currentUser.getIdToken();
+      await fetch('http://localhost:5000/api/user/tokens', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tokens: newTokens }),
+      });
+      setTokens(newTokens);
+
+      // Now, add the hero to the deck
+      const response = await fetch('http://localhost:5000/api/addToDeck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ hero: character }),
+      });
+
+      if (response.ok) {
+        alert("Hero added to deck!");
+      } else {
+        const data = await response.json();
+        alert(data.message || "Failed to add hero to deck.");
+      }
+    } catch (error) {
+      console.error("Error adding to deck:", error);
+      alert("An error occurred while adding to the deck.");
+    }
   };
+
+  const cost = Object.values(character.powerstats).reduce((acc, val) => acc + (parseInt(val, 10) || 0), 0);
+  const canAfford = tokens >= cost;
 
   return (
     <div className="character-card">
@@ -35,15 +73,16 @@ function CharacterCard({ character, context, onRemove }) {
           ))}
         </ul>
       </div>
+      <div style={{ textAlign: 'center', margin: '10px 0' }}>
+        <strong>Cost: {cost} Tokens</strong>
+      </div>
       {currentUser && (
         <div style={buttonContainerStyle}>
           {context === 'heroes' && (
-            <>
-              <button onClick={handleSaveHero} style={{ marginRight: '10px' }}>Save Hero</button>
-              <button onClick={handleAddToDeck}>Add to Deck</button>
-            </>
+            <button onClick={handleAddToDeck} disabled={!canAfford}>
+              {canAfford ? 'Add to Deck' : 'Not Enough Tokens'}
+            </button>
           )}
-          {context === 'saved' && <button onClick={() => onRemove(character.id)}>Remove</button>}
           {context === 'deck' && <button onClick={() => onRemove(character.id)}>Remove</button>}
         </div>
       )}
